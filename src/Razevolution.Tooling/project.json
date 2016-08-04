@@ -1,0 +1,26 @@
+﻿{
+  "version": "1.0.0-*",
+
+  "buildOptions": {
+    "outputName": "dotnet-razevolution",
+    "emitEntryPoint": true
+  },
+
+  "dependencies": {
+    "Microsoft.AspNetCore.Mvc.Razor.Host": "1.0.0",
+    "Microsoft.DotNet.Cli.Utils": "1.0.0-preview2-003121",
+    "Microsoft.Extensions.CommandLineUtils": "1.0.0",
+    "Newtonsoft.Json": "9.0.1"
+  },
+
+  "frameworks": {
+    "netcoreapp1.0": {
+      "dependencies": {
+        "Microsoft.NETCore.App": {
+          "type": "platform",
+          "version": "1.0.0"
+        }
+      }
+    }
+  }
+}
