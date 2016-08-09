@@ -17,10 +17,13 @@ namespace Razevolution.Tooling
             {
                 case VersionMessage.MessageType:
                     return body.ToObject<VersionMessage>();
-                case ProjectMessage.MessageType:
-                    return body.ToObject<ProjectMessage>();
+
+                case SolutionMessage.MessageType:
+                    return body.ToObject<SolutionMessage>();
+
                 case MetadataMessage.MessageType:
                     return body.ToObject<MetadataMessage>();
+
                 default:
                     return new UnknownMessage()
                     {

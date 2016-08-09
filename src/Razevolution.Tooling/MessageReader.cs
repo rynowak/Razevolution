@@ -9,7 +9,6 @@ namespace Razevolution.Tooling
     public abstract class MessageReader
     {
         private readonly CancellationTokenSource _cancel;
-        private readonly object _lock;
         private readonly MessageQueue _queue;
         private readonly BinaryReader _reader;
         private readonly Thread _thread;
@@ -18,28 +17,27 @@ namespace Razevolution.Tooling
         {
             _reader = reader;
             _queue = queue;
-
-            _lock = new object();
+            
             _cancel = new CancellationTokenSource();
             _thread = new Thread(ReadMessages) { IsBackground = true };
         }
 
         public void Start()
         {
-            lock (_lock)
-            {
-                _thread.Start();
-            }
-        }
-
-        public void Wait()
-        {
-            if (!_thread.IsAlive)
+            if (_thread.IsAlive)
             {
                 throw new InvalidOperationException();
             }
 
-            _thread.Join();
+            _thread.Start();
+        }
+
+        public void Wait()
+        {
+            if (_thread.IsAlive)
+            {
+                _thread.Join();
+            }
         }
 
         public void Stop()
@@ -68,8 +66,8 @@ namespace Razevolution.Tooling
                 }
                 catch (IOException)
                 {
-                    Console.WriteLine("shutting down");
-                    _cancel.Cancel();
+                    Console.WriteLine("shutting down listener");
+                    _queue.CompleteAdding();
                     return;
                 }
 
@@ -90,7 +88,7 @@ namespace Razevolution.Tooling
             {
                 Console.WriteLine($"parse error: {text}");
 
-                _queue.Enqueue(new ErrorMessage()
+                _queue.Add(new ErrorMessage()
                 {
                     OriginalText = text,
                 });
@@ -102,13 +100,13 @@ namespace Razevolution.Tooling
                 var message = DeserializeBody((string)type.Value, (JObject)body.Value);
                 Console.WriteLine($"got message {message}");
 
-                _queue.Enqueue(message);
+                _queue.Add(message);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"error: {text} {ex}");
 
-                _queue.Enqueue(new ErrorMessage()
+                _queue.Add(new ErrorMessage()
                 {
                     OriginalText = text,
                     Exception = ex,

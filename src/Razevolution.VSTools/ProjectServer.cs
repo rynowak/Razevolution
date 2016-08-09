@@ -53,14 +53,7 @@ namespace Razevolution.VSTools
             client.Send(VersionMessage.MessageType, new VersionMessage() { Version = 1 });
 
             var solution = _workspace.CurrentSolution;
-            foreach (var project in solution.Projects)
-            {
-                client.Send(ProjectMessage.MessageType, new ProjectMessage()
-                {
-                    Id = project.Id.Id,
-                    References = project.MetadataReferences.OfType<PortableExecutableReference>().Select(r => r.FilePath).ToList(),
-                });
-            }
+            client.Send(SolutionMessage.MessageType, CreateSolutionMessage(solution));
         }
 
         private void OnWorkspaceChanged(object sender, WorkspaceChangeEventArgs e)
@@ -101,14 +94,7 @@ namespace Razevolution.VSTools
 
                     _trace.WriteLine("updating solution");
 
-                    foreach (var project in solution.Projects)
-                    {
-                        _listener.Broadcast(ProjectMessage.MessageType, new ProjectMessage()
-                        {
-                            Id = project.Id.Id,
-                            References = project.MetadataReferences.OfType<PortableExecutableReference>().Select(r => r.FilePath).ToList(),
-                        });
-                    }
+                    _listener.Broadcast(SolutionMessage.MessageType, CreateSolutionMessage(solution));
                 }
 
                 if (_metadataDirty)
@@ -117,11 +103,11 @@ namespace Razevolution.VSTools
 
                     _trace.WriteLine("updating metadata");
 
-                    var batch = new List<Task<Compilation>>();
+                    var batch = new List<Task<CompilationResult>>();
 
                     foreach (var project in solution.Projects)
                     {
-                        _trace.WriteLine($"compiling {project}");
+                        _trace.WriteLine($"updating {project.Name}");
                         batch.Add(BeginCompile(project));
                     }
 
@@ -130,12 +116,22 @@ namespace Razevolution.VSTools
             }
         }
 
-        private static Task<Compilation> BeginCompile(Project project)
+        private async Task<CompilationResult> BeginCompile(Project project)
         {
-            return project.GetCompilationAsync();
+            Compilation compilation;
+            if (project.TryGetCompilation(out compilation))
+            {
+                _trace.WriteLine($"{project.Name} already has a compilation");
+                return new CompilationResult(project, compilation);
+            }
+
+            _trace.WriteLine("compiling {project.Name}");
+            compilation = await project.GetCompilationAsync();
+
+            return new CompilationResult(project, compilation);
         }
 
-        private void OnCompilationComplete(Task<Compilation[]> task)
+        private void OnCompilationComplete(Task<CompilationResult[]> task)
         {
             var results = task.Result;
             var stream = new MemoryStream();
@@ -144,19 +140,57 @@ namespace Razevolution.VSTools
                 stream.Seek(0, SeekOrigin.Begin);
                 stream.SetLength(0);
 
-                var compilation = results[i];
+                var project = results[i].Project;
+                var compilation = results[i].Compilation;
+
                 var emit = compilation.Emit(stream, options: EmitOptions);
 
-                _trace.WriteLine($"emit {compilation.AssemblyName} - {(emit.Success ? "success" : "failed")}");
+                _trace.WriteLine($"emit {project.Name} - {(emit.Success ? "success" : "failed")}");
                 if (emit.Success)
                 {
                     _listener.Broadcast(MetadataMessage.MessageType, new MetadataMessage()
                     {
-                        Name = compilation.AssemblyName,
+                        AssemblyName = compilation.AssemblyName,
                         Bytes = stream.ToArray(),
+                        Id = project.Id.Id,
+                        ProjectName = project.Name,
                     });
                 }
             }
+        }
+
+        private SolutionMessage CreateSolutionMessage(Solution solution)
+        {
+            var message = new SolutionMessage()
+            {
+                Projects = new List<SolutionMessage.Project>(),
+            };
+
+            foreach (var project in solution.Projects)
+            {
+                message.Projects.Add(new SolutionMessage.Project()
+                {
+                    Id = project.Id.Id,
+                    Name = project.Name,
+                    Path = project.FilePath,
+                    References = project.MetadataReferences.OfType<PortableExecutableReference>().Select(r => r.FilePath).ToList(),
+                });
+            }
+
+            return message;
+        }
+
+        private class CompilationResult
+        {
+            public CompilationResult(Project project, Compilation compilation)
+            {
+                Compilation = compilation;
+                Project = project;
+            }
+
+            public Compilation Compilation { get; }
+
+            public Project Project { get; }
         }
     }
 }

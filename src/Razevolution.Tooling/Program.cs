@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading.Tasks;
 using Microsoft.Extensions.CommandLineUtils;
 
 namespace Razevolution.Tooling
@@ -47,14 +44,18 @@ namespace Razevolution.Tooling
             var client = new TcpClient();
             client.ConnectAsync(IPAddress.Loopback, port).GetAwaiter().GetResult();
 
-            var stream = client.GetStream();
+            Console.WriteLine($"connected to {port}");
+
 
             var queue = new MessageQueue();
-            var reader = new DefaultMessageReader(new BinaryReader(stream), queue);
+            var reader = new DefaultMessageReader(new BinaryReader(client.GetStream()), queue);
             reader.Start();
 
-            Console.WriteLine($"connected to {port}");
+            var processor = new DefaultMessageProcessor(queue);
+            processor.Start();
+
             reader.Wait();
+            processor.Wait();
 
             return 0;
         }

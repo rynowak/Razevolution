@@ -55,7 +55,7 @@
     <Compile Include="Messages\ErrorMessage.cs" />
     <Compile Include="Messages\Message.cs" />
     <Compile Include="Messages\MetadataMessage.cs" />
-    <Compile Include="Messages\ProjectMessage.cs" />
+    <Compile Include="Messages\SolutionMessage.cs" />
     <Compile Include="Messages\UnknownMessage.cs" />
     <Compile Include="Messages\VersionMessage.cs" />
     <Compile Include="OutputWindowTrace.cs" />

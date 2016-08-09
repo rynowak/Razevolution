@@ -25,8 +25,7 @@ namespace Razevolution.VSTools
         public const string PackageGuidString = "9c65816c-52eb-489b-ac36-f0cfa7fa9fde";
 
         private const string OutputWindowGuidString = "843E6397-D6EA-47C2-A45F-DB8FB862E802";
-
-        private ProjectServerListener _listener;
+        
         private IVsOutputWindow _outputWindow;
         private IVsOutputWindowPane _pane;
         private ProjectServer _server;
