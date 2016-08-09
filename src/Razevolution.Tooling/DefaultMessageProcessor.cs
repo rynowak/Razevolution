@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc.Razor;
@@ -61,18 +62,22 @@ namespace Razevolution.Tooling
 
                     var p = new State.Project()
                     {
-                        Documents = Directory.EnumerateFiles(Path.GetDirectoryName(project.Path), "*.cshtml", SearchOption.AllDirectories).ToList(),
                         Id = project.Id,
                         Name = project.Name,
                         Path = project.Path,
-                        References = new List<string>(project.References ?? Enumerable.Empty<string>()),
                         Root = Path.GetDirectoryName(project.Path),
                     };
 
-                    foreach (var document in p.Documents)
+                    if (project.References != null)
                     {
-                        Console.WriteLine($"\t found document {document}");
+                        foreach (var reference in project.References)
+                        {
+                            p.References.Add(reference, null);
+                        }
                     }
+
+                    var documents = Directory.EnumerateFiles(p.Root, "*.cshtml", SearchOption.AllDirectories);
+                    p.Documents.AddRange(documents);
 
                     State.Projects.Add(project.Id, p);
                 }
@@ -87,6 +92,7 @@ namespace Razevolution.Tooling
                 Console.WriteLine($"project {message.ProjectName} not found");
             }
 
+            var stopwatch = Stopwatch.StartNew();
             Console.WriteLine($"updating metadata for {project.Name}");
             project.Metadata = message.Bytes;
 
@@ -97,15 +103,36 @@ namespace Razevolution.Tooling
                 references.Add(MetadataReference.CreateFromImage(ImmutableArray.Create(project.Metadata)));
             }
 
-            foreach (var reference in project.References)
+            // Lazy compute of MetadataReference
             {
-                references.Add(MetadataReference.CreateFromFile(reference));
+                var referencesUpdated = new List<KeyValuePair<string, MetadataReference>>();
+                foreach (var reference in project.References)
+                {
+                    var metadata = reference.Value;
+                    if (metadata == null)
+                    {
+                        referencesUpdated.Add(new KeyValuePair<string, MetadataReference>(reference.Key, MetadataReference.CreateFromFile(reference.Key)));
+                    }
+                }
+
+                foreach (var update in referencesUpdated)
+                {
+                    project.References[update.Key] = update.Value;
+                }
             }
 
-            var compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(Path.GetTempFileName()), references: references, options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            references.AddRange(project.References.Values);
+
+            var compilation = CSharpCompilation.Create(
+                Path.GetFileNameWithoutExtension(Path.GetTempFileName()), 
+                references: references, 
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
             var chunkTree = new DefaultChunkTreeCache(new PhysicalFileProvider(Path.GetDirectoryName(project.Path)));
-            var host = new MvcRazorHost(chunkTree, new SymbolTableTagHelperDescriptorProvider(compilation));
+            var host = new MvcRazorHost(chunkTree, new SymbolTableTagHelperDescriptorProvider(compilation))
+            {
+                DesignTimeMode = true,
+            };
             var engine = new RazorTemplateEngine(host);
 
             var syntaxTrees = new List<SyntaxTree>();
@@ -132,12 +159,14 @@ namespace Razevolution.Tooling
                 }
 
                 Console.WriteLine($"generated {document}");
-                Console.WriteLine(result.GeneratedCode);
+                //Console.WriteLine(result.GeneratedCode);
                 Console.WriteLine();
                 Console.WriteLine();
 
                 syntaxTrees.Add(CSharpSyntaxTree.ParseText(result.GeneratedCode, path: document));
             }
+
+            Console.WriteLine($"generated documents in {stopwatch.Elapsed.TotalMilliseconds}ms");
 
             compilation = compilation.AddSyntaxTrees(syntaxTrees);
 
@@ -147,7 +176,7 @@ namespace Razevolution.Tooling
                 Console.WriteLine($"roslyn error: {error.ToString()}");
             }
 
-            Console.WriteLine("updated documents");
+            Console.WriteLine($"updated documents in {stopwatch.Elapsed.TotalMilliseconds}ms");
         }
 
         protected virtual void Visit(ErrorMessage message)

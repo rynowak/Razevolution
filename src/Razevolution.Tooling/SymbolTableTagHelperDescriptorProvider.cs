@@ -21,12 +21,17 @@ namespace Razevolution.Tooling
         };
 
         private readonly SymbolTableTagHelperDescriptorFactory _descriptorFactory;
+        private readonly Dictionary<string, TagHelperDescriptor[]> _cache;
+        private readonly INamedTypeSymbol _iTagHelperSymbol;
 
         public SymbolTableTagHelperDescriptorProvider(Compilation compilation)
         {
             Compilation = compilation;
 
+            _cache = new Dictionary<string, TagHelperDescriptor[]>();
             _descriptorFactory = new SymbolTableTagHelperDescriptorFactory(Compilation, designTime: true);
+
+            _iTagHelperSymbol = Compilation.GetTypeByMetadataName(typeof(ITagHelper).FullName);
         }
 
         protected Compilation Compilation { get; }
@@ -111,25 +116,32 @@ namespace Razevolution.Tooling
             SourceLocation documentLocation,
             ErrorSink errorSink)
         {
+            TagHelperDescriptor[] result;
+            if (_cache.TryGetValue(assemblyName, out result))
+            {
+                return result;
+            }
+
             var assembly = GetAssembly(Compilation, assemblyName);
             if (assembly == null)
             {
                 Console.WriteLine($"could not find assembly {assemblyName} in compilation");
                 return Enumerable.Empty<TagHelperDescriptor>();
             }
-
-            var iTagHelperSymbol = Compilation.GetTypeByMetadataName(typeof(ITagHelper).FullName);
-            if (iTagHelperSymbol == null)
+            
+            if (_iTagHelperSymbol == null)
             {
                 Console.WriteLine($"could not find type {typeof(ITagHelper)} in compilation");
                 return Enumerable.Empty<TagHelperDescriptor>();
             }
 
-            var tagHelperSymbols = FindTypesImplementing(assembly, iTagHelperSymbol);
+            var tagHelperSymbols = FindTypesImplementing(assembly, _iTagHelperSymbol);
 
             // Convert types to TagHelperDescriptors
             var descriptors = tagHelperSymbols.SelectMany(
-                type => _descriptorFactory.CreateDescriptors(assemblyName, type, errorSink));
+                type => _descriptorFactory.CreateDescriptors(assemblyName, type, errorSink)).ToArray();
+
+            _cache.Add(assemblyName, descriptors);
 
             return descriptors;
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Microsoft.CodeAnalysis;
 
 namespace Razevolution.Tooling
 {
@@ -9,7 +10,7 @@ namespace Razevolution.Tooling
 
         public class Project
         {
-            public List<string> Documents { get; set; }
+            public List<string> Documents { get; } = new List<string>();
 
             public Guid Id { get; set; }
 
@@ -19,7 +20,7 @@ namespace Razevolution.Tooling
 
             public string Path { get; set; }
 
-            public List<string> References { get; set; }
+            public Dictionary<string, MetadataReference> References { get; } = new Dictionary<string, MetadataReference>();
 
             public string Root { get; set; }
         }
